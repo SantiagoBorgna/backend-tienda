@@ -19,7 +19,7 @@ FROM eclipse-temurin:17-jdk
 WORKDIR /app
 
 # Copiar el .jar compilado desde la imagen anterior
-COPY --from=build "/app/Tienda Web Arca/Backend/Tienda-Web-Arca/target/"*.jar app.jar
+COPY --from=build "/app/'Tienda Web Arca'/Backend/Tienda-Web-Arca/target/"*.jar app.jar
 
 EXPOSE 8080
 
