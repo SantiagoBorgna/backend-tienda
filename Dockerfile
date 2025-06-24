@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Cambiar al directorio donde está el pom.xml
-WORKDIR "/app/Tienda Web Arca/Backend/Tienda-Web-Arca"
+WORKDIR "/app/TiendaWebArca/Backend/Tienda-Web-Arca"
 
 # Compilar sin ejecutar los tests
 RUN mvn clean package -DskipTests
@@ -19,7 +19,7 @@ FROM eclipse-temurin:17-jdk
 WORKDIR /app
 
 # Copiar el .jar compilado desde la imagen anterior
-COPY --from=build "/app/'Tienda Web Arca'/Backend/Tienda-Web-Arca/target/"*.jar app.jar
+COPY --from=build "/app/TiendaWebArca/Backend/Tienda-Web-Arca/target/"*.jar app.jar
 
 EXPOSE 8080
 
