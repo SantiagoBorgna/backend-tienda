@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Cambiar al directorio donde está el pom.xml
-WORKDIR /app/Tienda Web Arca/Backend/Tienda-Web-Arca
+WORKDIR "/app/Tienda Web Arca/Backend/Tienda-Web-Arca"
 
 # Compilar sin ejecutar los tests
 RUN mvn clean package -DskipTests
