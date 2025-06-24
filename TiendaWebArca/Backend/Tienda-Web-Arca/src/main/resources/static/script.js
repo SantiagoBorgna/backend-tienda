@@ -3,7 +3,7 @@ let carrito = [];
 
 /* CARGAR ARTICULOS DESDE DB CHEQUEANDO SI HAY QUE APLICAR ALGUN FILTRO */
 document.addEventListener("DOMContentLoaded", () => {
-  fetch("http://localhost:8080/api/articulos")
+  fetch("https://backend-tienda-9gtc.onrender.com/api/articulos")
     .then((response) => response.json())
     .then((articulos) => {
       articulosCargados = articulos;
