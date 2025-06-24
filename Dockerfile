@@ -1,13 +1,15 @@
-# Usa una imagen de Maven para compilar el proyecto
+# Fase de construcción
 FROM maven:3.9.4-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY . .
+WORKDIR /app/Tienda-Web-Arca
 RUN mvn clean package -DskipTests
 
-# Usa una imagen liviana de Java para correr el proyecto
+# Fase de ejecución
 FROM eclipse-temurin:17-jdk
 WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build /app/Tienda-Web-Arca/target/*.jar app.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
+
