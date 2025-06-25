@@ -10,7 +10,7 @@ import java.util.*;
 @Service
 public class TiendaNubeService {
 
-    private final String ACCESS_TOKEN = "0e587efcbd2804630fec53042f38cce6b4877b4d";
+    private final String ACCESS_TOKEN = "2f4f2a29904f3a2c156ea4b25b832f9dab55e3f8";
     private final String API_URL = "https://api.tiendanube.com/2025-03/6374138/products";
 
     public void enviarProductoATiendaNube(Articulo articulo) {
@@ -45,10 +45,11 @@ public class TiendaNubeService {
         // Headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(ACCESS_TOKEN);
+        headers.set("Authorization", "Bearer " + ACCESS_TOKEN);
         headers.set("User-Agent", "ElArcaHome (santiborgna5@gmail.com)");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        System.out.println(body);
 
         // Enviar POST
         try {
