@@ -11,7 +11,7 @@ import java.util.*;
 public class TiendaNubeService {
 
     private final String ACCESS_TOKEN = "0e587efcbd2804630fec53042f38cce6b4877b4d";
-    private final String API_URL = "https://api.tiendanube.com/v1/6374138/items";
+    private final String API_URL = "https://api.tiendanube.com/v1/ME/items";
 
     public void enviarProductoATiendaNube(Articulo articulo) {
         RestTemplate restTemplate = new RestTemplate();
