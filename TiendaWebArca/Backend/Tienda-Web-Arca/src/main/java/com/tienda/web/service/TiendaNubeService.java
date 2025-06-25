@@ -10,7 +10,7 @@ import java.util.*;
 @Service
 public class TiendaNubeService {
 
-    private final String ACCESS_TOKEN = "2f4f2a29904f3a2c156ea4b25b832f9dab55e3f8";
+    private final String ACCESS_TOKEN = "2cac1023d5d977814a919a72f413523c52b3ac54";
     private final String API_URL = "https://api.tiendanube.com/v1/6374138/products";
 
     public void enviarProductoATiendaNube(Articulo articulo) {
