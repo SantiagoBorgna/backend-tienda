@@ -47,6 +47,7 @@ public class TiendaNubeService {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         System.out.println("Enviando producto: " + body);
+        System.out.println("Request completo: " + request);
 
         // Enviar POST
         try {
@@ -54,6 +55,12 @@ public class TiendaNubeService {
             System.out.println("Enviado a Tienda Nube: " + articulo.getNombre());
             System.out.println(response.getStatusCode());
             System.out.println(response.getBody());
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                System.out.println("Producto creado correctamente en Tienda Nube.");
+            } else {
+                System.out.println("Algo no anduvo bien, aunque no explotó.");
+            }
         } catch (Exception e) {
             System.err.println("Error al enviar el artículo " + articulo.getNombre() + ": " + e.getMessage());
         }
