@@ -10,7 +10,7 @@ import java.util.*;
 @Service
 public class TiendaNubeService {
 
-    private final String ACCESS_TOKEN = "2cac1023d5d977814a919a72f413523c52b3ac54";
+    private final String ACCESS_TOKEN = "794e9358306715511177c11653f3b47ed5a6a6f1";
     private final String API_URL = "https://api.tiendanube.com/v1/6374138/products";
 
     public void enviarProductoATiendaNube(Articulo articulo) {
@@ -42,8 +42,8 @@ public class TiendaNubeService {
         // Headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(ACCESS_TOKEN); // OK
-        headers.set("User-Agent", "ElArcaHome (santiborgna5@gmail.com)");
+        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
+        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         System.out.println("Enviando producto: " + body);
@@ -63,6 +63,29 @@ public class TiendaNubeService {
             }
         } catch (Exception e) {
             System.err.println("Error al enviar el artículo " + articulo.getNombre() + ": " + e.getMessage());
+        }
+    }
+
+    public void getProductosDesdeTiendaNube() {
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
+        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    API_URL,
+                    HttpMethod.GET,
+                    request,
+                    String.class);
+            System.out.println("Respuesta desde Tienda Nube (GET productos):");
+            System.out.println(response.getStatusCode());
+            System.out.println(response.getBody());
+        } catch (Exception e) {
+            System.err.println("Error al hacer GET de productos: " + e.getMessage());
         }
     }
 }

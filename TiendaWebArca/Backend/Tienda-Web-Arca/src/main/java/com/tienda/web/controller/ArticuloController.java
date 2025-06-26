@@ -100,4 +100,10 @@ public class ArticuloController {
         return ResponseEntity.ok("Sincronización completa");
     }
 
+    @GetMapping("/productos")
+    public ResponseEntity<Void> getProductosDesdeTiendaNube() {
+        tiendaNubeService.getProductosDesdeTiendaNube();
+        return ResponseEntity.ok().build();
+    }
+
 }
