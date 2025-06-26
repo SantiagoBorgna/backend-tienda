@@ -31,10 +31,10 @@ public class TiendaNubeService {
         Map<String, Object> body = new HashMap<>();
         body.put("name", Map.of("es", articulo.getNombre()));
         body.put("description", Map.of("es", articulo.getDescripcion()));
-        body.put("price", articulo.getPrecioVenta()); // opcional, puede ir en variant también
-        body.put("variants", List.of(Map.of(
-                "stock", articulo.getCant1() + articulo.getCant3(),
-                "price", articulo.getPrecioVenta())));
+        body.put("variants", List.of(
+                Map.of(
+                        "price", articulo.getPrecioVenta(),
+                        "stock", articulo.getCant1() + articulo.getCant3())));
         if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
         }
