@@ -131,40 +131,47 @@ public class TiendaNubeService {
     public void actualizarProductoEnTiendaNube(Long idTiendaNube, Articulo articulo) {
         RestTemplate restTemplate = new RestTemplate();
 
-        List<Map<String, String>> imagenes = new ArrayList<>();
-        if (articulo.getImg1() != null && !articulo.getImg1().isBlank())
-            imagenes.add(Map.of("src", articulo.getImg1()));
-        if (articulo.getImg2() != null && !articulo.getImg2().isBlank())
-            imagenes.add(Map.of("src", articulo.getImg2()));
-        if (articulo.getImg3() != null && !articulo.getImg3().isBlank())
-            imagenes.add(Map.of("src", articulo.getImg3()));
-        if (articulo.getImg4() != null && !articulo.getImg4().isBlank())
-            imagenes.add(Map.of("src", articulo.getImg4()));
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("name", Map.of("es", articulo.getNombre()));
-        body.put("description", Map.of("es", articulo.getDescripcion()));
-        body.put("variants", List.of(
-                Map.of(
-                        "price", articulo.getPrecioVenta(),
-                        "promotional_price", articulo.getPrecioVenta() * 0.8,
-                        "stock", articulo.getCant1() + articulo.getCant3())));
-        if (!imagenes.isEmpty()) {
-            body.put("images", imagenes);
-        }
-
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authentication", "bearer " + ACCESS_TOKEN);
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-        String urlUpdate = API_URL + "/" + idTiendaNube;
-
         try {
-            restTemplate.exchange(urlUpdate, HttpMethod.PUT, request, String.class);
+            // Paso 1: actualizar nombre y descripción
+            Map<String, Object> bodyProducto = new HashMap<>();
+            bodyProducto.put("name", Map.of("es", articulo.getNombre()));
+            bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
+
+            HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
+            String urlProducto = API_URL + "/" + idTiendaNube;
+
+            restTemplate.exchange(urlProducto, HttpMethod.PUT, requestProducto, String.class);
+
+            // Paso 2: obtener el producto para extraer el variant_id
+            HttpEntity<Void> requestGet = new HttpEntity<>(headers);
+            ResponseEntity<Map> response = restTemplate.exchange(urlProducto, HttpMethod.GET, requestGet, Map.class);
+
+            List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
+            if (variants == null || variants.isEmpty()) {
+                System.err.println("No se encontraron variantes para el producto: " + articulo.getNombre());
+                return;
+            }
+
+            Long variantId = ((Number) variants.get(0).get("id")).longValue();
+
+            // Paso 3: actualizar precio, stock y descuento del variant
+            Map<String, Object> bodyVariant = new HashMap<>();
+            bodyVariant.put("price", articulo.getPrecioVenta());
+            bodyVariant.put("promotional_price", articulo.getPrecioVenta() * 0.8);
+            bodyVariant.put("stock", articulo.getCant1() + articulo.getCant3());
+
+            HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
+            String urlVariant = urlProducto + "/variants/" + variantId;
+
+            restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
+
             System.out.println("Producto actualizado en Tienda Nube: " + articulo.getNombre());
+
         } catch (Exception e) {
             System.err.println("Error al actualizar el artículo " + articulo.getNombre() + ": " + e.getMessage());
         }
