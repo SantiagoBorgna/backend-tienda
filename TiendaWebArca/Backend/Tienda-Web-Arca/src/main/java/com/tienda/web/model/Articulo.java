@@ -56,6 +56,8 @@ public class Articulo {
     @Column(name = "ciudad_articulo")
     private String ciudadArticulo;
 
+    private Long idTiendaNube;
+
     // Getters y Setters
     public int getId() {
         return idArticulo;
@@ -183,6 +185,14 @@ public class Articulo {
 
     public void setCiudad(String ciudadArticulo) {
         this.ciudadArticulo = ciudadArticulo;
+    }
+
+    public Long getIdTiendaNube() {
+        return idTiendaNube;
+    }
+
+    public void setIdTiendaNube(Long idTiendaNube) {
+        this.idTiendaNube = idTiendaNube;
     }
 
 }

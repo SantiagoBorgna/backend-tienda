@@ -1,7 +1,10 @@
 package com.tienda.web.service;
 
 import com.tienda.web.model.Articulo;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -9,6 +12,9 @@ import java.util.*;
 
 @Service
 public class TiendaNubeService {
+
+    @Autowired
+    private ArticuloService articuloService;
 
     private final String ACCESS_TOKEN = "794e9358306715511177c11653f3b47ed5a6a6f1";
     private final String API_URL = "https://api.tiendanube.com/v1/6374138/products";
@@ -66,26 +72,99 @@ public class TiendaNubeService {
         }
     }
 
-    public void getProductosDesdeTiendaNube() {
+    public List<Map<String, Object>> obtenerProductosTiendaNube() {
         RestTemplate restTemplate = new RestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authentication", "bearer " + ACCESS_TOKEN);
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
-
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        try {
-            ResponseEntity<String> response = restTemplate.exchange(
-                    API_URL,
-                    HttpMethod.GET,
-                    request,
-                    String.class);
-            System.out.println("Respuesta desde Tienda Nube (GET productos):");
-            System.out.println(response.getStatusCode());
-            System.out.println(response.getBody());
-        } catch (Exception e) {
-            System.err.println("Error al hacer GET de productos: " + e.getMessage());
+        ResponseEntity<List> response = restTemplate.exchange(
+                API_URL,
+                HttpMethod.GET,
+                request,
+                List.class);
+
+        if (response.getStatusCode().is2xxSuccessful()) {
+            return response.getBody();
+        } else {
+            return Collections.emptyList();
         }
     }
+
+    public void sincronizarArticulos(List<Articulo> articulosLocales) {
+        List<Map<String, Object>> productosEnTienda = obtenerProductosTiendaNube();
+
+        for (Articulo articulo : articulosLocales) {
+            Map<String, Object> productoExistente = productosEnTienda.stream()
+                    .filter(p -> {
+                        Map<String, String> nameMap = (Map<String, String>) p.get("name");
+                        return nameMap != null && nameMap.get("es").equalsIgnoreCase(articulo.getNombre());
+                    })
+                    .findFirst()
+                    .orElse(null);
+
+            if (productoExistente == null) {
+                enviarProductoATiendaNube(articulo);
+            } else {
+                Long idProductoTienda = ((Number) productoExistente.get("id")).longValue();
+                actualizarProductoEnTiendaNube(idProductoTienda, articulo);
+            }
+        }
+    }
+
+    public void actualizarProductoEnTiendaNube(Long idTiendaNube, Articulo articulo) {
+        RestTemplate restTemplate = new RestTemplate();
+
+        List<Map<String, String>> imagenes = new ArrayList<>();
+        if (articulo.getImg1() != null && !articulo.getImg1().isBlank())
+            imagenes.add(Map.of("src", articulo.getImg1()));
+        if (articulo.getImg2() != null && !articulo.getImg2().isBlank())
+            imagenes.add(Map.of("src", articulo.getImg2()));
+        if (articulo.getImg3() != null && !articulo.getImg3().isBlank())
+            imagenes.add(Map.of("src", articulo.getImg3()));
+        if (articulo.getImg4() != null && !articulo.getImg4().isBlank())
+            imagenes.add(Map.of("src", articulo.getImg4()));
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("name", Map.of("es", articulo.getNombre()));
+        body.put("description", Map.of("es", articulo.getDescripcion()));
+        body.put("variants", List.of(
+                Map.of(
+                        "price", articulo.getPrecioVenta(),
+                        "stock", articulo.getCant1() + articulo.getCant3())));
+        if (!imagenes.isEmpty()) {
+            body.put("images", imagenes);
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
+        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        String urlUpdate = API_URL + "/" + idTiendaNube;
+
+        try {
+            restTemplate.exchange(urlUpdate, HttpMethod.PUT, request, String.class);
+            System.out.println("Producto actualizado en Tienda Nube: " + articulo.getNombre());
+        } catch (Exception e) {
+            System.err.println("Error al actualizar el artículo " + articulo.getNombre() + ": " + e.getMessage());
+        }
+    }
+
+    @Scheduled(cron = "0 0 3 * * *") // Todos los días a las 03:00 AM
+    public void sincronizacionAutomatica() {
+        System.out.println(">>> Iniciando sincronización automática con Tienda Nube...");
+
+        // Este método deberías tenerlo en ArticuloService
+        List<Articulo> articulos = articuloService.obtenerArticulosDeArca();
+
+        sincronizarArticulos(articulos);
+
+        System.out.println(">>> Sincronización automática finalizada.");
+    }
+
 }

@@ -4,6 +4,7 @@ import com.tienda.web.model.Articulo;
 import com.tienda.web.model.ItemVenta;
 import com.tienda.web.model.Venta;
 import com.tienda.web.repository.ArticuloRepository;
+import com.tienda.web.service.ArticuloService;
 import com.tienda.web.service.TiendaNubeService;
 import com.tienda.web.service.VentaService;
 
@@ -21,10 +22,13 @@ public class ArticuloController {
 
     private final ArticuloRepository articuloRepository;
     private final VentaService ventaService;
+    private final ArticuloService articuloService;
 
-    public ArticuloController(ArticuloRepository articuloRepository, VentaService ventaService) {
+    public ArticuloController(ArticuloRepository articuloRepository, VentaService ventaService,
+            ArticuloService articuloService) {
         this.articuloRepository = articuloRepository;
         this.ventaService = ventaService;
+        this.articuloService = articuloService;
     }
 
     @GetMapping
@@ -90,19 +94,15 @@ public class ArticuloController {
     private TiendaNubeService tiendaNubeService;
 
     @GetMapping("/sincronizar")
-    public ResponseEntity<String> sincronizarConTiendaNube() {
-        List<Articulo> articulos = articuloRepository.findByCiudadArticulo("Oncativo");
-
-        for (Articulo articulo : articulos) {
-            tiendaNubeService.enviarProductoATiendaNube(articulo);
-        }
-
-        return ResponseEntity.ok("Sincronización completa");
+    public ResponseEntity<String> sincronizarTienda() {
+        List<Articulo> articulos = articuloService.obtenerArticulosDeArca();
+        tiendaNubeService.sincronizarArticulos(articulos);
+        return ResponseEntity.ok("Sincronización completada.");
     }
 
     @GetMapping("/productos")
-    public ResponseEntity<Void> getProductosDesdeTiendaNube() {
-        tiendaNubeService.getProductosDesdeTiendaNube();
+    public ResponseEntity<Void> obtenerProductosTiendaNube() {
+        tiendaNubeService.obtenerProductosTiendaNube();
         return ResponseEntity.ok().build();
     }
 
