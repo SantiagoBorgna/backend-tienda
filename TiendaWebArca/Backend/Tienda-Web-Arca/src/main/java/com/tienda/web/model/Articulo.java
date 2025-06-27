@@ -56,6 +56,7 @@ public class Articulo {
     @Column(name = "ciudad_articulo")
     private String ciudadArticulo;
 
+    @Column(name = "id_tienda_nube")
     private Long idTiendaNube;
 
     // Getters y Setters

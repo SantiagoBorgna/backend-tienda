@@ -1,6 +1,8 @@
 package com.tienda.web.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tienda.web.model.Articulo;
+import com.tienda.web.repository.ArticuloRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
@@ -15,6 +17,8 @@ public class TiendaNubeService {
 
     @Autowired
     private ArticuloService articuloService;
+    @Autowired
+    private ArticuloRepository articuloRepository;
 
     private final String ACCESS_TOKEN = "794e9358306715511177c11653f3b47ed5a6a6f1";
     private final String API_URL = "https://api.tiendanube.com/v1/6374138/products";
@@ -40,6 +44,7 @@ public class TiendaNubeService {
         body.put("variants", List.of(
                 Map.of(
                         "price", articulo.getPrecioVenta(),
+                        "promotional_price", articulo.getPrecioVenta() * 0.8,
                         "stock", articulo.getCant1() + articulo.getCant3())));
         if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
@@ -63,7 +68,16 @@ public class TiendaNubeService {
             System.out.println(response.getBody());
 
             if (response.getStatusCode().is2xxSuccessful()) {
-                System.out.println("Producto creado correctamente en Tienda Nube.");
+                // Extraer ID del producto creado
+                ObjectMapper mapper = new ObjectMapper();
+                Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
+                Long idTiendaNube = ((Number) responseData.get("id")).longValue();
+
+                // Guardar el ID en la base de datos
+                articulo.setIdTiendaNube(idTiendaNube);
+                articuloRepository.save(articulo);
+
+                System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
             } else {
                 System.out.println("Algo no anduvo bien, aunque no explotó.");
             }
@@ -133,6 +147,7 @@ public class TiendaNubeService {
         body.put("variants", List.of(
                 Map.of(
                         "price", articulo.getPrecioVenta(),
+                        "promotional_price", articulo.getPrecioVenta() * 0.8,
                         "stock", articulo.getCant1() + articulo.getCant3())));
         if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
