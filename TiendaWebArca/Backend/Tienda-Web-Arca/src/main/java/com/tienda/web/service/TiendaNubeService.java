@@ -41,11 +41,12 @@ public class TiendaNubeService {
         Map<String, Object> body = new HashMap<>();
         body.put("name", Map.of("es", articulo.getNombre()));
         body.put("description", Map.of("es", articulo.getDescripcion()));
+        body.put("custom_product_type", articulo.getCategoria());
         body.put("variants", List.of(
                 Map.of(
                         "price", articulo.getPrecioVenta(),
                         "promotional_price", articulo.getPrecioVenta() * 0.8,
-                        "stock", articulo.getCant1() + articulo.getCant3())));
+                        "stock", articulo.getCant1())));
         if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
         }
@@ -141,6 +142,7 @@ public class TiendaNubeService {
             Map<String, Object> bodyProducto = new HashMap<>();
             bodyProducto.put("name", Map.of("es", articulo.getNombre()));
             bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
+            bodyProducto.put("custom_product_type", articulo.getCategoria());
 
             HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
             String urlProducto = API_URL + "/" + idTiendaNube;
@@ -163,7 +165,7 @@ public class TiendaNubeService {
             Map<String, Object> bodyVariant = new HashMap<>();
             bodyVariant.put("price", articulo.getPrecioVenta());
             bodyVariant.put("promotional_price", articulo.getPrecioVenta() * 0.8);
-            bodyVariant.put("stock", articulo.getCant1() + articulo.getCant3());
+            bodyVariant.put("stock", articulo.getCant1());
 
             HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
             String urlVariant = urlProducto + "/variants/" + variantId;
@@ -177,7 +179,7 @@ public class TiendaNubeService {
         }
     }
 
-    @Scheduled(cron = "0 0 3 * * *") // Todos los días a las 03:00 AM
+    @Scheduled(cron = "0 0 */4 * * *") // Cada 4hs
     public void sincronizacionAutomatica() {
         System.out.println(">>> Iniciando sincronización automática con Tienda Nube...");
 
@@ -187,6 +189,30 @@ public class TiendaNubeService {
         sincronizarArticulos(articulos);
 
         System.out.println(">>> Sincronización automática finalizada.");
+    }
+
+    public void registrarWebhookOrdenCreada() {
+        RestTemplate restTemplate = new RestTemplate();
+
+        String url = "https://api.tiendanube.com/v1/6374138/webhooks";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
+        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("event", "order/created");
+        body.put("url", "https://backend-tienda-9gtc.onrender.com/api/webhook/order");
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            System.out.println("Webhook creado: " + response.getBody());
+        } catch (Exception e) {
+            System.err.println("Error al registrar el webhook: " + e.getMessage());
+        }
     }
 
 }

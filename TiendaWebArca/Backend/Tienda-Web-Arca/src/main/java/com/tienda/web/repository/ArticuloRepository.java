@@ -13,4 +13,6 @@ public interface ArticuloRepository extends JpaRepository<Articulo, Integer> {
     List<Articulo> findByCiudadArticulo(String ciudadArticulo);
 
     List<Articulo> findByCategoriaArticulo(String categoriaArticulo);
+
+    Articulo findByNombreArticulo(String nombre);
 }
