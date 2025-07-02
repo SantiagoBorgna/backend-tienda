@@ -26,7 +26,11 @@ public class TiendaNubeService {
     public void enviarProductoATiendaNube(Articulo articulo) {
         RestTemplate restTemplate = new RestTemplate();
 
-        // Armar la lista de imágenes
+        // Normalizar nombre
+        String nombreFormateado = articulo.getNombre().toLowerCase();
+        nombreFormateado = Character.toUpperCase(nombreFormateado.charAt(0)) + nombreFormateado.substring(1);
+
+        // Imágenes
         List<Map<String, String>> imagenes = new ArrayList<>();
         if (articulo.getImg1() != null && !articulo.getImg1().isBlank())
             imagenes.add(Map.of("src", articulo.getImg1()));
@@ -37,19 +41,21 @@ public class TiendaNubeService {
         if (articulo.getImg4() != null && !articulo.getImg4().isBlank())
             imagenes.add(Map.of("src", articulo.getImg4()));
 
-        // Crear el cuerpo de la solicitud
+        // Buscar ID de categoría
+        Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
+
+        // Armar body
         Map<String, Object> body = new HashMap<>();
-        body.put("name", Map.of("es", articulo.getNombre()));
+        body.put("name", Map.of("es", nombreFormateado));
         body.put("description", Map.of("es", articulo.getDescripcion()));
         body.put("custom_product_type", articulo.getCategoria());
-        body.put("variants", List.of(
-                Map.of(
-                        "price", articulo.getPrecioVenta(),
-                        "promotional_price", articulo.getPrecioVenta() * 0.8,
-                        "stock", articulo.getCant1())));
-        if (!imagenes.isEmpty()) {
+        body.put("variants", List.of(Map.of(
+                "price", articulo.getPrecioVenta(),
+                "stock", articulo.getCant1())));
+        if (!imagenes.isEmpty())
             body.put("images", imagenes);
-        }
+        if (idCategoria != null)
+            body.put("category_ids", List.of(idCategoria));
 
         // Headers
         HttpHeaders headers = new HttpHeaders();
@@ -58,29 +64,20 @@ public class TiendaNubeService {
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-        System.out.println("Enviando producto: " + body);
-        System.out.println("Request completo: " + request);
 
-        // Enviar POST
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
-            System.out.println("Enviado a Tienda Nube: " + articulo.getNombre());
+            System.out.println("Enviado a Tienda Nube: " + nombreFormateado);
             System.out.println(response.getStatusCode());
             System.out.println(response.getBody());
 
             if (response.getStatusCode().is2xxSuccessful()) {
-                // Extraer ID del producto creado
                 ObjectMapper mapper = new ObjectMapper();
                 Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
                 Long idTiendaNube = ((Number) responseData.get("id")).longValue();
-
-                // Guardar el ID en la base de datos
                 articulo.setIdTiendaNube(idTiendaNube);
                 articuloRepository.save(articulo);
-
                 System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
-            } else {
-                System.out.println("Algo no anduvo bien, aunque no explotó.");
             }
         } catch (Exception e) {
             System.err.println("Error al enviar el artículo " + articulo.getNombre() + ": " + e.getMessage());
@@ -138,22 +135,30 @@ public class TiendaNubeService {
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
         try {
-            // Paso 1: actualizar nombre y descripción
+            // Formatear nombre
+            String nombreFormateado = articulo.getNombre().toLowerCase();
+            nombreFormateado = Character.toUpperCase(nombreFormateado.charAt(0)) + nombreFormateado.substring(1);
+
+            // Buscar ID de categoría
+            Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
+
+            // Paso 1: actualizar info del producto
             Map<String, Object> bodyProducto = new HashMap<>();
-            bodyProducto.put("name", Map.of("es", articulo.getNombre()));
+            bodyProducto.put("name", Map.of("es", nombreFormateado));
             bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
             bodyProducto.put("custom_product_type", articulo.getCategoria());
+            if (idCategoria != null)
+                bodyProducto.put("category_ids", List.of(idCategoria));
 
             HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
             String urlProducto = API_URL + "/" + idTiendaNube;
-
             restTemplate.exchange(urlProducto, HttpMethod.PUT, requestProducto, String.class);
 
-            // Paso 2: obtener el producto para extraer el variant_id
+            // Paso 2: obtener variante
             HttpEntity<Void> requestGet = new HttpEntity<>(headers);
             ResponseEntity<Map> response = restTemplate.exchange(urlProducto, HttpMethod.GET, requestGet, Map.class);
-
             List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
+
             if (variants == null || variants.isEmpty()) {
                 System.err.println("No se encontraron variantes para el producto: " + articulo.getNombre());
                 return;
@@ -161,18 +166,16 @@ public class TiendaNubeService {
 
             Long variantId = ((Number) variants.get(0).get("id")).longValue();
 
-            // Paso 3: actualizar precio, stock y descuento del variant
+            // Paso 3: actualizar variante
             Map<String, Object> bodyVariant = new HashMap<>();
             bodyVariant.put("price", articulo.getPrecioVenta());
-            bodyVariant.put("promotional_price", articulo.getPrecioVenta() * 0.8);
             bodyVariant.put("stock", articulo.getCant1());
 
             HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
             String urlVariant = urlProducto + "/variants/" + variantId;
-
             restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
 
-            System.out.println("Producto actualizado en Tienda Nube: " + articulo.getNombre());
+            System.out.println("Producto actualizado en Tienda Nube: " + nombreFormateado);
 
         } catch (Exception e) {
             System.err.println("Error al actualizar el artículo " + articulo.getNombre() + ": " + e.getMessage());
@@ -213,6 +216,44 @@ public class TiendaNubeService {
         } catch (Exception e) {
             System.err.println("Error al registrar el webhook: " + e.getMessage());
         }
+    }
+
+    public List<Map<String, Object>> obtenerCategoriasTiendaNube() {
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
+        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        String categoriasUrl = "https://api.tiendanube.com/v1/6374138/categories";
+
+        try {
+            ResponseEntity<List> response = restTemplate.exchange(
+                    categoriasUrl,
+                    HttpMethod.GET,
+                    request,
+                    List.class);
+
+            return response.getBody();
+        } catch (Exception e) {
+            System.err.println("❌ Error al obtener categorías: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    public Long obtenerIdCategoriaPorNombre(String nombreCategoria) {
+        List<Map<String, Object>> categorias = obtenerCategoriasTiendaNube();
+
+        for (Map<String, Object> cat : categorias) {
+            Map<String, String> nameMap = (Map<String, String>) cat.get("name");
+            if (nameMap != null && nombreCategoria.equalsIgnoreCase(nameMap.get("es"))) {
+                return ((Number) cat.get("id")).longValue();
+            }
+        }
+
+        return null; // Si no se encuentra
     }
 
 }
