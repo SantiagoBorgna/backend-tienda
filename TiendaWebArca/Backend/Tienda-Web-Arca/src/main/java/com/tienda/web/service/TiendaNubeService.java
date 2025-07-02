@@ -73,13 +73,6 @@ public class TiendaNubeService {
                 articulo.setIdTiendaNube(idTiendaNube);
                 articuloRepository.save(articulo);
 
-                // ✅ Asignar categoría por separado
-                Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
-                if (idCategoria != null) {
-                    System.out.println("Asignando categoría ID: " + idCategoria);
-                    asignarCategoriaProducto(idTiendaNube, idCategoria);
-                }
-
                 System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
             }
 
@@ -175,12 +168,6 @@ public class TiendaNubeService {
 
             restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
 
-            // Paso 3: reasignar categoría si es necesario
-            Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
-            if (idCategoria != null) {
-                asignarCategoriaProducto(idTiendaNube, idCategoria);
-            }
-
             System.out.println("Producto actualizado en Tienda Nube: " + nombreCapitalizado);
 
         } catch (Exception e) {
@@ -224,69 +211,11 @@ public class TiendaNubeService {
         }
     }
 
-    public List<Map<String, Object>> obtenerCategoriasTiendaNube() {
-        RestTemplate restTemplate = new RestTemplate();
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
-        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
-
-        HttpEntity<Void> request = new HttpEntity<>(headers);
-
-        String categoriasUrl = "https://api.tiendanube.com/v1/6374138/categories";
-
-        try {
-            ResponseEntity<List> response = restTemplate.exchange(
-                    categoriasUrl,
-                    HttpMethod.GET,
-                    request,
-                    List.class);
-
-            return response.getBody();
-        } catch (Exception e) {
-            System.err.println("❌ Error al obtener categorías: " + e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    public Long obtenerIdCategoriaPorNombre(String nombreCategoria) {
-        List<Map<String, Object>> categorias = obtenerCategoriasTiendaNube();
-
-        for (Map<String, Object> cat : categorias) {
-            Map<String, String> nameMap = (Map<String, String>) cat.get("name");
-            if (nameMap != null && nombreCategoria.equalsIgnoreCase(nameMap.get("es"))) {
-                return ((Number) cat.get("id")).longValue();
-            }
-        }
-
-        return null; // Si no se encuentra
-    }
-
     private String capitalize(String texto) {
         if (texto == null || texto.isBlank())
             return "";
         texto = texto.trim().toLowerCase();
         return Character.toUpperCase(texto.charAt(0)) + texto.substring(1);
-    }
-
-    public void asignarCategoriaProducto(Long idProducto, Long idCategoria) {
-        RestTemplate restTemplate = new RestTemplate();
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
-        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
-
-        Map<String, Object> body = Map.of("id", idCategoria);
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-        String url = API_URL + "/" + idProducto + "/categories";
-        try {
-            restTemplate.postForEntity(url, request, String.class);
-            System.out.println("✅ Categoría asignada exitosamente al producto " + idProducto);
-        } catch (Exception e) {
-            System.err.println("❌ Error al asignar categoría al producto " + idProducto + ": " + e.getMessage());
-        }
     }
 
 }
