@@ -43,6 +43,7 @@ public class TiendaNubeService {
 
         // Buscar ID de categoría
         Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
+        System.out.println("Se obtuvo una categoria: " + idCategoria);
 
         // Armar body
         Map<String, Object> body = new HashMap<>();
@@ -68,6 +69,7 @@ public class TiendaNubeService {
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
             System.out.println("Enviado a Tienda Nube: " + nombreFormateado);
+            System.out.println("Su categoria es: " + articulo.getCategoria());
             System.out.println(response.getStatusCode());
             System.out.println(response.getBody());
 
