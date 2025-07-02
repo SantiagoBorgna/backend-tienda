@@ -26,11 +26,6 @@ public class TiendaNubeService {
     public void enviarProductoATiendaNube(Articulo articulo) {
         RestTemplate restTemplate = new RestTemplate();
 
-        // Normalizar nombre
-        String nombreFormateado = articulo.getNombre().toLowerCase();
-        nombreFormateado = Character.toUpperCase(nombreFormateado.charAt(0)) + nombreFormateado.substring(1);
-
-        // Imágenes
         List<Map<String, String>> imagenes = new ArrayList<>();
         if (articulo.getImg1() != null && !articulo.getImg1().isBlank())
             imagenes.add(Map.of("src", articulo.getImg1()));
@@ -41,48 +36,55 @@ public class TiendaNubeService {
         if (articulo.getImg4() != null && !articulo.getImg4().isBlank())
             imagenes.add(Map.of("src", articulo.getImg4()));
 
-        // Buscar ID de categoría
-        Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
-        System.out.println("Se obtuvo una categoria: " + idCategoria);
+        // Nombre capitalizado
+        String nombreCapitalizado = capitalize(articulo.getNombre());
 
-        // Armar body
         Map<String, Object> body = new HashMap<>();
-        body.put("name", Map.of("es", nombreFormateado));
+        body.put("name", Map.of("es", nombreCapitalizado));
         body.put("description", Map.of("es", articulo.getDescripcion()));
         body.put("custom_product_type", articulo.getCategoria());
-        body.put("variants", List.of(Map.of(
-                "price", articulo.getPrecioVenta(),
-                "stock", articulo.getCant1())));
-        if (!imagenes.isEmpty())
+        body.put("variants", List.of(
+                Map.of(
+                        "price", articulo.getPrecioVenta(),
+                        "stock", articulo.getCant1())));
+        if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
-        if (idCategoria != null)
-            body.put("category_ids", List.of(idCategoria));
+        }
 
-        // Headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authentication", "bearer " + ACCESS_TOKEN);
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        System.out.println("Enviando producto: " + body);
 
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
-            System.out.println("Enviado a Tienda Nube: " + nombreFormateado);
-            System.out.println("Su categoria es: " + articulo.getCategoria());
+            System.out.println("Enviado a Tienda Nube: " + nombreCapitalizado);
             System.out.println(response.getStatusCode());
-            System.out.println(response.getBody());
 
             if (response.getStatusCode().is2xxSuccessful()) {
                 ObjectMapper mapper = new ObjectMapper();
                 Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
                 Long idTiendaNube = ((Number) responseData.get("id")).longValue();
+
+                // Guardar el ID en base de datos
                 articulo.setIdTiendaNube(idTiendaNube);
                 articuloRepository.save(articulo);
+
+                // ✅ Asignar categoría por separado
+                Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
+                if (idCategoria != null) {
+                    System.out.println("Asignando categoría ID: " + idCategoria);
+                    asignarCategoriaProducto(idTiendaNube, idCategoria);
+                }
+
                 System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
             }
+
         } catch (Exception e) {
-            System.err.println("Error al enviar el artículo " + articulo.getNombre() + ": " + e.getMessage());
+            System.err.println("Error al enviar el artículo " + nombreCapitalizado + ": " + e.getMessage());
         }
     }
 
@@ -137,47 +139,49 @@ public class TiendaNubeService {
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
         try {
-            // Formatear nombre
-            String nombreFormateado = articulo.getNombre().toLowerCase();
-            nombreFormateado = Character.toUpperCase(nombreFormateado.charAt(0)) + nombreFormateado.substring(1);
+            // Capitalizar nombre
+            String nombreCapitalizado = capitalize(articulo.getNombre());
 
-            // Buscar ID de categoría
-            Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
-
-            // Paso 1: actualizar info del producto
+            // Paso 1: actualizar nombre, descripción y categoría visible
             Map<String, Object> bodyProducto = new HashMap<>();
-            bodyProducto.put("name", Map.of("es", nombreFormateado));
+            bodyProducto.put("name", Map.of("es", nombreCapitalizado));
             bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
             bodyProducto.put("custom_product_type", articulo.getCategoria());
-            if (idCategoria != null)
-                bodyProducto.put("category_ids", List.of(idCategoria));
 
             HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
             String urlProducto = API_URL + "/" + idTiendaNube;
+
             restTemplate.exchange(urlProducto, HttpMethod.PUT, requestProducto, String.class);
 
-            // Paso 2: obtener variante
+            // Paso 2: actualizar variante
             HttpEntity<Void> requestGet = new HttpEntity<>(headers);
             ResponseEntity<Map> response = restTemplate.exchange(urlProducto, HttpMethod.GET, requestGet, Map.class);
-            List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
 
+            List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
             if (variants == null || variants.isEmpty()) {
-                System.err.println("No se encontraron variantes para el producto: " + articulo.getNombre());
+                System.err.println("No se encontraron variantes para el producto: " + nombreCapitalizado);
                 return;
             }
 
             Long variantId = ((Number) variants.get(0).get("id")).longValue();
 
-            // Paso 3: actualizar variante
             Map<String, Object> bodyVariant = new HashMap<>();
             bodyVariant.put("price", articulo.getPrecioVenta());
             bodyVariant.put("stock", articulo.getCant1());
+            bodyVariant.put("promotional_price", articulo.getPrecioVenta() * 0.8);
 
             HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
             String urlVariant = urlProducto + "/variants/" + variantId;
+
             restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
 
-            System.out.println("Producto actualizado en Tienda Nube: " + nombreFormateado);
+            // Paso 3: reasignar categoría si es necesario
+            Long idCategoria = obtenerIdCategoriaPorNombre(articulo.getCategoria());
+            if (idCategoria != null) {
+                asignarCategoriaProducto(idTiendaNube, idCategoria);
+            }
+
+            System.out.println("Producto actualizado en Tienda Nube: " + nombreCapitalizado);
 
         } catch (Exception e) {
             System.err.println("Error al actualizar el artículo " + articulo.getNombre() + ": " + e.getMessage());
@@ -256,6 +260,33 @@ public class TiendaNubeService {
         }
 
         return null; // Si no se encuentra
+    }
+
+    private String capitalize(String texto) {
+        if (texto == null || texto.isBlank())
+            return "";
+        texto = texto.trim().toLowerCase();
+        return Character.toUpperCase(texto.charAt(0)) + texto.substring(1);
+    }
+
+    public void asignarCategoriaProducto(Long idProducto, Long idCategoria) {
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authentication", "bearer " + ACCESS_TOKEN);
+        headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
+
+        Map<String, Object> body = Map.of("id", idCategoria);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        String url = API_URL + "/" + idProducto + "/categories";
+        try {
+            restTemplate.postForEntity(url, request, String.class);
+            System.out.println("✅ Categoría asignada exitosamente al producto " + idProducto);
+        } catch (Exception e) {
+            System.err.println("❌ Error al asignar categoría al producto " + idProducto + ": " + e.getMessage());
+        }
     }
 
 }
