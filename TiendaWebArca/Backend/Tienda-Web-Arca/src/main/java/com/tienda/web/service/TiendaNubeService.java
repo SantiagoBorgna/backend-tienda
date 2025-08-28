@@ -161,7 +161,6 @@ public class TiendaNubeService {
             Map<String, Object> bodyVariant = new HashMap<>();
             bodyVariant.put("price", articulo.getPrecioVenta());
             bodyVariant.put("stock", articulo.getCant1());
-            bodyVariant.put("promotional_price", articulo.getPrecioVenta() * 0.8);
 
             HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
             String urlVariant = urlProducto + "/variants/" + variantId;
