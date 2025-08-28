@@ -20,7 +20,7 @@ public class TiendaNubeService {
     @Autowired
     private ArticuloRepository articuloRepository;
 
-    private final String ACCESS_TOKEN = "942bf17d2b0d70987fd7ec8f7b87c166a872c5e2";
+    private final String ACCESS_TOKEN = "794e9358306715511177c11653f3b47ed5a6a6f1";
     private final String API_URL = "https://api.tiendanube.com/v1/6374138/products";
 
     public void enviarProductoATiendaNube(Articulo articulo) {
