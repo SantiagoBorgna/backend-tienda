@@ -1,5 +1,6 @@
 package com.tienda.web.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tienda.web.model.Articulo;
 import com.tienda.web.repository.ArticuloRepository;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
@@ -36,7 +38,6 @@ public class TiendaNubeService {
         if (articulo.getImg4() != null && !articulo.getImg4().isBlank())
             imagenes.add(Map.of("src", articulo.getImg4()));
 
-        // Nombre capitalizado
         String nombreCapitalizado = capitalize(articulo.getNombre());
 
         Map<String, Object> body = new HashMap<>();
@@ -47,6 +48,7 @@ public class TiendaNubeService {
                 Map.of(
                         "price", articulo.getPrecioVenta(),
                         "stock", articulo.getCant1())));
+
         if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
         }
@@ -57,28 +59,26 @@ public class TiendaNubeService {
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-        System.out.println("Enviando producto: " + body);
 
-        try {
+        safeRestCall(() -> {
+            System.out.println("Enviando producto: " + body);
             ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
-            System.out.println("Enviado a Tienda Nube: " + nombreCapitalizado);
-            System.out.println(response.getStatusCode());
 
             if (response.getStatusCode().is2xxSuccessful()) {
                 ObjectMapper mapper = new ObjectMapper();
-                Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
-                Long idTiendaNube = ((Number) responseData.get("id")).longValue();
+                try {
+                    Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
+                    Long idTiendaNube = ((Number) responseData.get("id")).longValue();
 
-                // Guardar el ID en base de datos
-                articulo.setIdTiendaNube(idTiendaNube);
-                articuloRepository.save(articulo);
+                    articulo.setIdTiendaNube(idTiendaNube);
+                    articuloRepository.save(articulo);
 
-                System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
+                    System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException("Error al parsear la respuesta de Tienda Nube", e);
+                }
             }
-
-        } catch (Exception e) {
-            System.err.println("Error al enviar el artículo " + nombreCapitalizado + ": " + e.getMessage());
-        }
+        });
     }
 
     public List<Map<String, Object>> obtenerProductosTiendaNube() {
@@ -106,19 +106,37 @@ public class TiendaNubeService {
         List<Map<String, Object>> productosEnTienda = obtenerProductosTiendaNube();
 
         for (Articulo articulo : articulosLocales) {
-            Map<String, Object> productoExistente = productosEnTienda.stream()
-                    .filter(p -> {
-                        Map<String, String> nameMap = (Map<String, String>) p.get("name");
-                        return nameMap != null && nameMap.get("es").equalsIgnoreCase(articulo.getNombre());
-                    })
-                    .findFirst()
-                    .orElse(null);
+            try {
+                if (articulo.getIdTiendaNube() != null) {
+                    // Tiene ID, actualizar directamente
+                    actualizarProductoEnTiendaNube(articulo.getIdTiendaNube(), articulo);
+                } else {
+                    // Buscar por nombre (normalizado) para asociar ID
+                    Map<String, Object> productoExistente = productosEnTienda.stream()
+                            .filter(p -> {
+                                Map<String, String> nameMap = (Map<String, String>) p.get("name");
+                                return nameMap != null && normalizar(nameMap.get("es"))
+                                        .equals(normalizar(articulo.getNombre()));
+                            })
+                            .findFirst()
+                            .orElse(null);
 
-            if (productoExistente == null) {
-                enviarProductoATiendaNube(articulo);
-            } else {
-                Long idProductoTienda = ((Number) productoExistente.get("id")).longValue();
-                actualizarProductoEnTiendaNube(idProductoTienda, articulo);
+                    if (productoExistente != null) {
+                        Long idProductoTienda = ((Number) productoExistente.get("id")).longValue();
+                        articulo.setIdTiendaNube(idProductoTienda);
+                        articuloRepository.save(articulo);
+                        actualizarProductoEnTiendaNube(idProductoTienda, articulo);
+                    } else {
+                        enviarProductoATiendaNube(articulo);
+                    }
+                }
+
+                // Throttle: 3 segundos para no superar el límite de Tienda Nube (20/min)
+                Thread.sleep(3000);
+
+            } catch (Exception e) {
+                System.err.println(
+                        "Error en sincronización del artículo " + articulo.getNombre() + ": " + e.getMessage());
             }
         }
     }
@@ -131,26 +149,23 @@ public class TiendaNubeService {
         headers.set("Authentication", "bearer " + ACCESS_TOKEN);
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
-        try {
-            // Capitalizar nombre
+        safeRestCall(() -> {
             String nombreCapitalizado = capitalize(articulo.getNombre());
+            String urlProducto = API_URL + "/" + idTiendaNube;
 
-            // Paso 1: actualizar nombre, descripción y categoría visible
             Map<String, Object> bodyProducto = new HashMap<>();
             bodyProducto.put("name", Map.of("es", nombreCapitalizado));
             bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
             bodyProducto.put("custom_product_type", articulo.getCategoria());
 
             HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
-            String urlProducto = API_URL + "/" + idTiendaNube;
-
             restTemplate.exchange(urlProducto, HttpMethod.PUT, requestProducto, String.class);
 
-            // Paso 2: actualizar variante
+            // Obtener variante
             HttpEntity<Void> requestGet = new HttpEntity<>(headers);
             ResponseEntity<Map> response = restTemplate.exchange(urlProducto, HttpMethod.GET, requestGet, Map.class);
-
             List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
+
             if (variants == null || variants.isEmpty()) {
                 System.err.println("No se encontraron variantes para el producto: " + nombreCapitalizado);
                 return;
@@ -166,12 +181,8 @@ public class TiendaNubeService {
             String urlVariant = urlProducto + "/variants/" + variantId;
 
             restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
-
             System.out.println("Producto actualizado en Tienda Nube: " + nombreCapitalizado);
-
-        } catch (Exception e) {
-            System.err.println("Error al actualizar el artículo " + articulo.getNombre() + ": " + e.getMessage());
-        }
+        });
     }
 
     @Scheduled(cron = "0 0 */4 * * *") // Cada 4hs
@@ -215,6 +226,41 @@ public class TiendaNubeService {
             return "";
         texto = texto.trim().toLowerCase();
         return Character.toUpperCase(texto.charAt(0)) + texto.substring(1);
+    }
+
+    private String normalizar(String texto) {
+        if (texto == null)
+            return "";
+        texto = texto.toLowerCase().trim();
+        texto = texto.replaceAll("[áàäâ]", "a")
+                .replaceAll("[éèëê]", "e")
+                .replaceAll("[íìïî]", "i")
+                .replaceAll("[óòöô]", "o")
+                .replaceAll("[úùüû]", "u")
+                .replaceAll("[^a-z0-9 ]", "");
+        return texto;
+    }
+
+    private void safeRestCall(Runnable call) {
+        boolean success = false;
+        int retries = 0;
+
+        while (!success && retries < 5) {
+            try {
+                call.run();
+                success = true;
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                retries++;
+                int wait = 5000 * retries; // espera incremental
+                System.out.println("Límite alcanzado. Esperando " + wait + "ms...");
+                try {
+                    Thread.sleep(wait);
+                } catch (InterruptedException ignored) {
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
 }
