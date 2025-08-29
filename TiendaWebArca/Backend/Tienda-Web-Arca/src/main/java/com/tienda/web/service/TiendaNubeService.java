@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
@@ -44,10 +43,7 @@ public class TiendaNubeService {
         body.put("name", Map.of("es", nombreCapitalizado));
         body.put("description", Map.of("es", articulo.getDescripcion()));
         body.put("custom_product_type", articulo.getCategoria());
-        body.put("variants", List.of(
-                Map.of(
-                        "price", articulo.getPrecioVenta(),
-                        "stock", articulo.getCant1())));
+        body.put("variants", List.of(Map.of("price", articulo.getPrecioVenta(), "stock", articulo.getCant1())));
 
         if (!imagenes.isEmpty()) {
             body.put("images", imagenes);
@@ -60,25 +56,23 @@ public class TiendaNubeService {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        safeRestCall(() -> {
-            System.out.println("Enviando producto: " + body);
-            ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
+        System.out.println("Enviando producto: " + body);
+        ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
 
-            if (response.getStatusCode().is2xxSuccessful()) {
-                ObjectMapper mapper = new ObjectMapper();
-                try {
-                    Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
-                    Long idTiendaNube = ((Number) responseData.get("id")).longValue();
+        if (response.getStatusCode().is2xxSuccessful()) {
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                Map<String, Object> responseData = mapper.readValue(response.getBody(), Map.class);
+                Long idTiendaNube = ((Number) responseData.get("id")).longValue();
 
-                    articulo.setIdTiendaNube(idTiendaNube);
-                    articuloRepository.save(articulo);
+                articulo.setIdTiendaNube(idTiendaNube);
+                articuloRepository.save(articulo);
 
-                    System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
-                } catch (JsonProcessingException e) {
-                    throw new RuntimeException("Error al parsear la respuesta de Tienda Nube", e);
-                }
+                System.out.println("Producto creado correctamente. ID Tienda Nube: " + idTiendaNube);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Error al parsear la respuesta de Tienda Nube", e);
             }
-        });
+        }
     }
 
     public List<Map<String, Object>> obtenerProductosTiendaNube() {
@@ -108,10 +102,8 @@ public class TiendaNubeService {
         for (Articulo articulo : articulosLocales) {
             try {
                 if (articulo.getIdTiendaNube() != null) {
-                    // Tiene ID, actualizar directamente
                     actualizarProductoEnTiendaNube(articulo.getIdTiendaNube(), articulo);
                 } else {
-                    // Buscar por nombre (normalizado) para asociar ID
                     Map<String, Object> productoExistente = productosEnTienda.stream()
                             .filter(p -> {
                                 Map<String, String> nameMap = (Map<String, String>) p.get("name");
@@ -129,10 +121,11 @@ public class TiendaNubeService {
                     } else {
                         enviarProductoATiendaNube(articulo);
                     }
+
                 }
 
-                // Throttle: 3 segundos para no superar el límite de Tienda Nube (20/min)
-                Thread.sleep(3000);
+                // Espera 4 segundos entre requests
+                Thread.sleep(5000);
 
             } catch (Exception e) {
                 System.err.println(
@@ -149,40 +142,40 @@ public class TiendaNubeService {
         headers.set("Authentication", "bearer " + ACCESS_TOKEN);
         headers.set("User-Agent", "Integrador El Arca Home (santiborgna5@gmail.com)");
 
-        safeRestCall(() -> {
-            String nombreCapitalizado = capitalize(articulo.getNombre());
-            String urlProducto = API_URL + "/" + idTiendaNube;
+        String nombreCapitalizado = capitalize(articulo.getNombre());
+        String urlProducto = API_URL + "/" + idTiendaNube;
 
-            Map<String, Object> bodyProducto = new HashMap<>();
-            bodyProducto.put("name", Map.of("es", nombreCapitalizado));
-            bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
-            bodyProducto.put("custom_product_type", articulo.getCategoria());
+        // Actualizar datos del producto
+        Map<String, Object> bodyProducto = new HashMap<>();
+        bodyProducto.put("name", Map.of("es", nombreCapitalizado));
+        bodyProducto.put("description", Map.of("es", articulo.getDescripcion()));
+        bodyProducto.put("custom_product_type", articulo.getCategoria());
 
-            HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
-            restTemplate.exchange(urlProducto, HttpMethod.PUT, requestProducto, String.class);
+        HttpEntity<Map<String, Object>> requestProducto = new HttpEntity<>(bodyProducto, headers);
+        restTemplate.exchange(urlProducto, HttpMethod.PUT, requestProducto, String.class);
 
-            // Obtener variante
-            HttpEntity<Void> requestGet = new HttpEntity<>(headers);
-            ResponseEntity<Map> response = restTemplate.exchange(urlProducto, HttpMethod.GET, requestGet, Map.class);
-            List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
+        // Obtener variante
+        HttpEntity<Void> requestGet = new HttpEntity<>(headers);
+        ResponseEntity<Map> response = restTemplate.exchange(urlProducto, HttpMethod.GET, requestGet, Map.class);
+        List<Map<String, Object>> variants = (List<Map<String, Object>>) response.getBody().get("variants");
 
-            if (variants == null || variants.isEmpty()) {
-                System.err.println("No se encontraron variantes para el producto: " + nombreCapitalizado);
-                return;
-            }
+        if (variants == null || variants.isEmpty()) {
+            System.err.println("No se encontraron variantes para el producto: " + nombreCapitalizado);
+            return;
+        }
 
-            Long variantId = ((Number) variants.get(0).get("id")).longValue();
+        Long variantId = ((Number) variants.get(0).get("id")).longValue();
 
-            Map<String, Object> bodyVariant = new HashMap<>();
-            bodyVariant.put("price", articulo.getPrecioVenta());
-            bodyVariant.put("stock", articulo.getCant1());
+        // Actualizar variante
+        Map<String, Object> bodyVariant = new HashMap<>();
+        bodyVariant.put("price", articulo.getPrecioVenta());
+        bodyVariant.put("stock", articulo.getCant1());
 
-            HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
-            String urlVariant = urlProducto + "/variants/" + variantId;
+        HttpEntity<Map<String, Object>> requestVariant = new HttpEntity<>(bodyVariant, headers);
+        String urlVariant = urlProducto + "/variants/" + variantId;
 
-            restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
-            System.out.println("Producto actualizado en Tienda Nube: " + nombreCapitalizado);
-        });
+        restTemplate.exchange(urlVariant, HttpMethod.PUT, requestVariant, String.class);
+        System.out.println("Producto actualizado en Tienda Nube: " + nombreCapitalizado);
     }
 
     @Scheduled(cron = "0 0 */4 * * *") // Cada 4hs
@@ -239,28 +232,6 @@ public class TiendaNubeService {
                 .replaceAll("[úùüû]", "u")
                 .replaceAll("[^a-z0-9 ]", "");
         return texto;
-    }
-
-    private void safeRestCall(Runnable call) {
-        boolean success = false;
-        int retries = 0;
-
-        while (!success && retries < 5) {
-            try {
-                call.run();
-                success = true;
-            } catch (HttpClientErrorException.TooManyRequests e) {
-                retries++;
-                int wait = 5000 * retries; // espera incremental
-                System.out.println("Límite alcanzado. Esperando " + wait + "ms...");
-                try {
-                    Thread.sleep(wait);
-                } catch (InterruptedException ignored) {
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
     }
 
 }
