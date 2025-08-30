@@ -24,6 +24,9 @@ public class TiendaNubeService {
     private final String ACCESS_TOKEN = "794e9358306715511177c11653f3b47ed5a6a6f1";
     private final String API_URL = "https://api.tiendanube.com/v1/6374138/products";
 
+    private final Object lock = new Object();
+    private boolean sincronizando = false;
+
     public void enviarProductoATiendaNube(Articulo articulo) {
         RestTemplate restTemplate = new RestTemplate();
 
@@ -97,39 +100,58 @@ public class TiendaNubeService {
     }
 
     public void sincronizarArticulos(List<Articulo> articulosLocales) {
-        List<Map<String, Object>> productosEnTienda = obtenerProductosTiendaNube();
+        synchronized (lock) {
+            if (sincronizando) {
+                System.out.println("Ya hay una sincronización en curso. Se ignora esta nueva solicitud.");
+                return;
+            }
+            sincronizando = true;
+        }
 
-        for (Articulo articulo : articulosLocales) {
-            try {
-                if (articulo.getIdTiendaNube() != null) {
-                    actualizarProductoEnTiendaNube(articulo.getIdTiendaNube(), articulo);
-                } else {
-                    Map<String, Object> productoExistente = productosEnTienda.stream()
-                            .filter(p -> {
-                                Map<String, String> nameMap = (Map<String, String>) p.get("name");
-                                return nameMap != null && normalizar(nameMap.get("es"))
-                                        .equals(normalizar(articulo.getNombre()));
-                            })
-                            .findFirst()
-                            .orElse(null);
+        try {
+            List<Map<String, Object>> productosEnTienda = obtenerProductosTiendaNube();
+            System.out.println("✅ Iniciando sincronización con Tienda Nube...");
 
-                    if (productoExistente != null) {
-                        Long idProductoTienda = ((Number) productoExistente.get("id")).longValue();
-                        articulo.setIdTiendaNube(idProductoTienda);
-                        articuloRepository.save(articulo);
-                        actualizarProductoEnTiendaNube(idProductoTienda, articulo);
+            for (Articulo articulo : articulosLocales) {
+                try {
+                    if (articulo.getIdTiendaNube() != null) {
+                        actualizarProductoEnTiendaNube(articulo.getIdTiendaNube(), articulo);
                     } else {
-                        enviarProductoATiendaNube(articulo);
+                        Map<String, Object> productoExistente = productosEnTienda.stream()
+                                .filter(p -> {
+                                    Map<String, String> nameMap = (Map<String, String>) p.get("name");
+                                    return nameMap != null && normalizar(nameMap.get("es"))
+                                            .equals(normalizar(articulo.getNombre()));
+                                })
+                                .findFirst()
+                                .orElse(null);
+
+                        if (productoExistente != null) {
+                            Long idProductoTienda = ((Number) productoExistente.get("id")).longValue();
+                            articulo.setIdTiendaNube(idProductoTienda);
+                            articuloRepository.save(articulo);
+                            actualizarProductoEnTiendaNube(idProductoTienda, articulo);
+                        } else {
+                            enviarProductoATiendaNube(articulo);
+                        }
                     }
 
+                    // Espera 4 segundos entre requests
+                    Thread.sleep(4000);
+
+                } catch (Exception e) {
+                    System.err.println(
+                            "Error en sincronización del artículo " + articulo.getNombre() + ": " + e.getMessage());
                 }
+            }
 
-                // Espera 4 segundos entre requests
-                Thread.sleep(5000);
+            System.out.println("Sincronización completada correctamente.");
 
-            } catch (Exception e) {
-                System.err.println(
-                        "Error en sincronización del artículo " + articulo.getNombre() + ": " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Error general en sincronización: " + e.getMessage());
+        } finally {
+            synchronized (lock) {
+                sincronizando = false;
             }
         }
     }
